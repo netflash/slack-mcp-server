@@ -105,6 +105,77 @@ func TestUnitParseParamsToolConversationsCursorBeatsDurationLimit(t *testing.T) 
 	}
 }
 
+// An explicit "oldest" param sets an absolute floor for incremental polling,
+// independent of whatever limit/cursor would otherwise compute.
+func TestUnitParseParamsToolConversationsOldestParam(t *testing.T) {
+	ch := &ConversationsHandler{logger: zap.NewNop()}
+
+	t.Run("explicit Slack timestamp passes through", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{"channel_id": "C1234567890", "oldest": "1700000000.000000"}
+
+		params, err := ch.parseParamsToolConversations(context.Background(), req)
+		require.NoError(t, err)
+		assert.Equal(t, "1700000000.000000", params.oldest)
+	})
+
+	t.Run("RFC3339 is converted to a Slack timestamp", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{"channel_id": "C1234567890", "oldest": "2023-11-14T22:13:20Z"}
+
+		params, err := ch.parseParamsToolConversations(context.Background(), req)
+		require.NoError(t, err)
+		assert.Equal(t, "1700000000.000000", params.oldest)
+	})
+
+	t.Run("bare Unix seconds is converted to a Slack timestamp", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{"channel_id": "C1234567890", "oldest": "1700000000"}
+
+		params, err := ch.parseParamsToolConversations(context.Background(), req)
+		require.NoError(t, err)
+		assert.Equal(t, "1700000000.000000", params.oldest)
+	})
+
+	t.Run("invalid value is rejected", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{"channel_id": "C1234567890", "oldest": "not-a-timestamp"}
+
+		_, err := ch.parseParamsToolConversations(context.Background(), req)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "oldest")
+	})
+
+	t.Run("overrides the window a duration limit would compute", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{"channel_id": "C1234567890", "limit": "1d", "oldest": "1700000000.000000"}
+
+		params, err := ch.parseParamsToolConversations(context.Background(), req)
+		require.NoError(t, err)
+		assert.Equal(t, "1700000000.000000", params.oldest)
+	})
+
+	t.Run("applies even when a cursor is set", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{"channel_id": "C1234567890", "cursor": "abc", "oldest": "1700000000.000000"}
+
+		params, err := ch.parseParamsToolConversations(context.Background(), req)
+		require.NoError(t, err)
+		assert.Equal(t, "1700000000.000000", params.oldest)
+	})
+
+	t.Run("applies when a cursor is set alongside the schema's default duration limit", func(t *testing.T) {
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{"channel_id": "C1234567890", "limit": "1d", "cursor": "abc", "oldest": "1700000000.000000"}
+
+		params, err := ch.parseParamsToolConversations(context.Background(), req)
+		require.NoError(t, err)
+		assert.Equal(t, "1700000000.000000", params.oldest)
+		assert.Empty(t, params.latest)
+		assert.Equal(t, "abc", params.cursor)
+	})
+}
+
 func TestUnitConversationsGetMessageParamValidation(t *testing.T) {
 	ch := &ConversationsHandler{logger: zap.NewNop()}
 

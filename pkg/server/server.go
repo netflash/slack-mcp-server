@@ -108,6 +108,7 @@ const (
 
 	descChannelID = "Channel ID (Cxxxxxxxxxx) or a channel/DM name starting with # or @, e.g. #general or @username."
 	descCursor    = "Pagination cursor from the #next_cursor line of the previous response."
+	descOldest    = "Exclusive lower bound: a Slack timestamp (1234567890.123456), Unix seconds, or an RFC3339 time. Replaces the start of the window a duration 'limit' would compute, and still applies when 'cursor' is set. For incremental polling, pass the newest MsgID from the previous response; that message is not returned again."
 	// descChannelIDRaw is for tools whose handler passes the ID straight to Slack
 	// without resolving #name or @name.
 	descChannelIDRaw      = "Channel ID starting with C or G (Cxxxxxxxxxx); names are not resolved."
