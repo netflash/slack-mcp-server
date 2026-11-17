@@ -97,6 +97,29 @@ func TestPhaseGuards(t *testing.T) {
 	assert.Len(t, base.ListTools(), 2)
 }
 
+// conversations_history/replies must declare "oldest" in their schema, or an
+// MCP client drops the argument before it ever reaches the handler.
+func TestConversationsHistoryAndRepliesDeclareOldestParam(t *testing.T) {
+	for _, k := range []string{"SLACK_MCP_XOXP_TOKEN", "SLACK_MCP_XOXB_TOKEN", "SLACK_MCP_OAUTH_KEYCHAIN_ACCOUNT", "SLACK_MCP_BROWSER_KEYCHAIN_ACCOUNT"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("SLACK_MCP_XOXC_TOKEN", "demo")
+	t.Setenv("SLACK_MCP_XOXD_TOKEN", "demo")
+
+	api, err := provider.New("stdio", zap.NewNop())
+	require.NoError(t, err)
+	t.Cleanup(api.Close)
+	srv := NewMCPServer(api, zap.NewNop(), ValidToolNames)
+	tools := srv.server.ListTools()
+
+	for _, name := range []string{ToolConversationsHistory, ToolConversationsReplies} {
+		tool, ok := tools[name]
+		require.True(t, ok, "%s must be registered", name)
+		_, ok = tool.Tool.InputSchema.Properties["oldest"]
+		assert.True(t, ok, "%s must declare an oldest param", name)
+	}
+}
+
 func TestListsWriteToolsDeclareObjectArrayContracts(t *testing.T) {
 	server := mcpserver.NewMCPServer("test", "1", mcpserver.WithToolCapabilities(false))
 	enabled := []string{ToolListsCreate, ToolListsUpdate, ToolListsItemsCreate, ToolListsItemsUpdate}

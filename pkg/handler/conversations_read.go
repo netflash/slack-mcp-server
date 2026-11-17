@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/korotovsky/slack-mcp-server/pkg/limiter"
 	"github.com/korotovsky/slack-mcp-server/pkg/provider"
@@ -218,6 +219,16 @@ func (ch *ConversationsHandler) parseParamsToolConversations(ctx context.Context
 		}
 	}
 
+	// An explicit oldest is a caller-supplied floor: it replaces the floor
+	// the limit default computed and, unlike that default, survives a
+	// cursor so every page of incremental polling honours it.
+	if oldest := strings.TrimSpace(request.GetString("oldest", "")); oldest != "" {
+		paramOldest, err = parseOldestParam(oldest)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if strings.HasPrefix(channel, "#") || strings.HasPrefix(channel, "@") {
 		if ready, err := ch.apiProvider.IsReady(); !ready {
 			if errors.Is(err, provider.ErrUsersNotReady) {
@@ -250,6 +261,24 @@ func (ch *ConversationsHandler) parseParamsToolConversations(ctx context.Context
 		cursor:   cursor,
 		activity: activity,
 	}, nil
+}
+
+// parseOldestParam accepts a Slack timestamp, Unix seconds, or an RFC3339
+// time and returns the Slack timestamp form Oldest expects. The caller's
+// value replaces the floor a duration limit would compute and is kept when
+// a cursor is set; latest and limit are unaffected.
+func parseOldestParam(value string) (string, error) {
+	if validSlackTimestamp(value) {
+		return value, nil
+	}
+	if unix, err := strconv.ParseInt(value, 10, 64); err == nil && unix >= 0 {
+		return fmt.Sprintf("%d.000000", unix), nil
+	}
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return "", fmt.Errorf("oldest must be a Slack timestamp (1234567890.123456), Unix seconds, or RFC3339 time, got %q", value)
+	}
+	return fmt.Sprintf("%d.000000", t.Unix()), nil
 }
 
 func (ch *ConversationsHandler) parseParamsToolSearch(ctx context.Context, req mcp.CallToolRequest) (*searchParams, error) {
